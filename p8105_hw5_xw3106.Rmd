@@ -1,0 +1,125 @@
+---
+title: "p8105_hw5_xw3106"
+author: Xinyu Wang(xw3106)
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+library(broom)
+```
+
+# Problem 1
+```{r}
+# Function: Generate n birthdays and check if duplicates exist
+has_dup_birthday <- function(n, days = 365L) {
+  bdays <- sample.int(days, size = n, replace = TRUE)
+  
+  any(duplicated(bdays))
+}
+```
+
+```{r}
+set.seed(8105)
+
+n_grid <- 2:50
+B <- 10000
+
+birthday_sim_results <- map_df(n_grid, function(n) {
+  
+  sims <- replicate(B, has_dup_birthday(n))
+  
+  tibble(
+    n = n,
+    prob_dup = mean(sims)
+  )
+})
+```
+
+```{r}
+# Visualization: Probability that at least two people share a birthday
+ggplot(birthday_sim_results, aes(x = n, y = prob_dup)) +
+  geom_line(color = "black") +
+  geom_point(size = 1.4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+  labs(
+    title = "Birthday Paradox Simulation (10,000 trials per n)",
+    x = "Group size (n)",
+    y = "Pr(at least one shared birthday)"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+# Problem 2
+```{r}
+# Function: simulate dataset, return estimate and p-value
+sim_t_test = function(mu, n = 30, sigma = 5) {
+  
+  x = rnorm(n, mean = mu, sd = sigma)
+  
+  test = t.test(x, mu = 0)
+  
+  # extract mean estimate and p-value
+  tibble(
+    mu_hat  = mean(x),
+    p_value = broom::tidy(test)$p.value,
+    mu_true = mu
+  )
+}
+
+## Run simulation for mu = 0:6 with 5000 duplicates
+set.seed(8105)
+
+sim_results =
+  map_df(0:6, function(mu) {
+    replicate(5000, sim_t_test(mu), simplify = FALSE) |> bind_rows()
+  })
+```
+
+```{r}
+## Summarize simulation results
+summary_df =
+  sim_results |>
+  group_by(mu_true) |>
+  summarize(
+    power= mean(p_value < 0.05),
+    mean_est_all= mean(mu_hat),
+    mean_est_rej= mean(mu_hat[p_value < 0.05])
+  )
+
+summary_df
+```
+
+```{r}
+summary_df |>
+  ggplot(aes(x = mu_true, y = power)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    x = "True mean (μ)",
+    y = "Power (Pr(reject H₀))",
+    title = "Power of one-sample t-test",
+    subtitle = "n = 30, σ = 5, α = 0.05; 5000 simulations per μ"
+  ) +
+  theme_bw(base_size = 12)
+```
+
+```{r}
+summary_df |>
+  pivot_longer(cols = c(mean_est_all, mean_est_rej),
+               names_to = "type", values_to = "mean_est") |>
+  mutate(type = recode(type,
+                       mean_est_all = "E[μ̂] overall",
+                       mean_est_rej = "E[μ̂ | reject H₀]")) |>
+  ggplot(aes(x = mu_true, y = mean_est, color = type)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    x = "True mean (μ)",
+    y = "Average estimate (μ̂)",
+    title = "Bias in mean estimates across simulations",
+    subtitle = "Comparison of overall vs only rejected samples"
+  ) +
+  theme_bw(base_size = 12)
+```
+

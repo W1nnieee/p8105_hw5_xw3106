@@ -98,8 +98,7 @@ summary_df |>
   labs(
     x = "True mean (μ)",
     y = "Power (Pr(reject H₀))",
-    title = "Power of one-sample t-test",
-    subtitle = "n = 30, σ = 5, α = 0.05; 5000 simulations per μ"
+    title = "Power of one-sample t-test"
   ) +
   theme_bw(base_size = 12)
 ```
@@ -109,16 +108,80 @@ summary_df |>
   pivot_longer(cols = c(mean_est_all, mean_est_rej),
                names_to = "type", values_to = "mean_est") |>
   mutate(type = recode(type,
-                       mean_est_all = "E[μ̂] overall",
-                       mean_est_rej = "E[μ̂ | reject H₀]")) |>
+                       mean_est_all = "mean_est",
+                       mean_est_rej = "mean_est_reject]")) |>
   ggplot(aes(x = mu_true, y = mean_est, color = type)) +
   geom_line() +
   geom_point() +
   labs(
     x = "True mean (μ)",
     y = "Average estimate (μ̂)",
-    title = "Bias in mean estimates across simulations",
-    subtitle = "Comparison of overall vs only rejected samples"
+    title = "Bias in mean estimates across simulations"
+  ) +
+  theme_bw(base_size = 12)
+```
+
+# Problem 3
+```{r}
+# Load data
+homicide_df =
+  read_csv("data/homicide-data.csv")
+homicide_df |> 
+  glimpse()
+```
+
+```{r}
+# Create city_state and summarize
+city_summary =
+  homicide_df |>
+  mutate(city_state = str_c(city, ", ", state)) |>
+  group_by(city_state) |>
+  summarize(
+    total = n(),
+    unsolved = sum(disposition %in% c("Closed without arrest", "Open/No arrest"))
+  )
+```
+
+```{r}
+# test for Baltimore, MD
+baltimore =
+  city_summary |>
+  filter(city_state == "Baltimore, MD")
+
+baltimore_test =
+  prop.test(baltimore$unsolved, baltimore$total)
+
+baltimore_tidy =
+  tidy(baltimore_test) |>
+  select(estimate, conf.low, conf.high)
+
+baltimore_tidy
+```
+
+```{r}
+# run prop test for all cities
+city_results =
+  city_summary |>
+  mutate(
+    test = map2(unsolved, total, ~prop.test(.x,.y)),
+    tidy = map(test, tidy)
+  ) |>
+  unnest(tidy) |>
+  select(city_state, estimate, conf.low, conf.high) |>
+  arrange(desc(estimate))
+```
+
+```{r}
+## Visualization
+city_results |>
+  mutate(city_state = fct_reorder(city_state, estimate)) |>
+  ggplot(aes(x = estimate, y = city_state)) +
+  geom_point() +
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), width = 0.3) +
+  labs(
+    x = "Estimated proportion of unsolved homicides",
+    y = "City",
+    title = "Proportion of unsolved homicides by city with 95% interval"
   ) +
   theme_bw(base_size = 12)
 ```
